@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Earth with Controls</title>
+    <style>
+        body { 
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+        }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        #controls {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        .control-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .control-btn:hover {
+            background: #45a049;
+        }
+        .control-btn.active {
+            background: #2196F3;
+        }
+        #reset {
+            background: #f44336;
+        }
+        #reset:hover {
+            background: #da190b;
+        }
+        .coordinates {
+            position: absolute;
+            color: white;
+            font-size: 14px;
+            padding: 5px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            display: none;
+        }
+        #longitude {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #latitude {
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="longitude" class="coordinates">经度: 0°E</div>
+        <div id="latitude" class="coordinates">纬度: 0°N</div>
+    </div>
+    <div id="controls">
+        <button class="control-btn" id="equator">赤道</button>
+        <button class="control-btn" id="meridians">经线</button>
+        <button class="control-btn" id="parallels">纬线</button>
+        <button class="control-btn" id="hemispheres-ns">南北半球</button>
+        <button class="control-btn" id="hemispheres-ew">东西半球</button>
+        <button class="control-btn" id="reset">重置</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        let scene, camera, renderer, earth, controls;
+        let equatorLine, meridiansGroup, parallelsGroup;
+        let northSouthGroup, eastWestGroup;
+        let longitudeDisplay, latitudeDisplay;
+        let initialCameraPosition;
+        let autoRotate = true;
+
+        init();
+        animate();
+
+        function init() {
+            longitudeDisplay = document.getElementById('longitude');
+            latitudeDisplay = document.getElementById('latitude');
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 3;
+            initialCameraPosition = camera.position.clone();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.rotateSpeed = 0.5;
+            controls.enableZoom = true;
+            controls.enablePan = false;
+            controls.minDistance = 2;
+            controls.maxDistance = 5;
+
+            controls.addEventListener('start', function() {
+                autoRotate = false;
+            });
+
+            const geometry = new THREE.SphereGeometry(1, 64, 64);
+            const texture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg');
+            const material = new THREE.MeshPhongMaterial({ map: texture });
+            earth = new THREE.Mesh(geometry, material);
+            scene.add(earth);
+
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 3, 5);
+            scene.add(directionalLight);
+
+            createHelperGroups();
+            addEventListeners();
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function createHelperGroups() {
+            const equatorGeometry = new THREE.TorusGeometry(1, 0.002, 16, 100);
+            const equatorMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            equatorLine = new THREE.Mesh(equatorGeometry, equatorMaterial);
+            equatorLine.rotation.x = Math.PI / 2;
+            equatorLine.visible = false;
+            scene.add(equatorLine);
+
+            meridiansGroup = new THREE.Group();
+            for(let i = 0; i < 24; i++) {
+                const meridian = createMeridian();
+                meridian.rotation.y = (i * Math.PI) / 12;
+                meridiansGroup.add(meridian);
+            }
+            meridiansGroup.visible = false;
+            scene.add(meridiansGroup);
+
+            parallelsGroup = new THREE.Group();
+            for(let i = -80; i <= 80; i += 20) {
+                const parallel = createParallel(i);
+                parallelsGroup.add(parallel);
+            }
+            parallelsGroup.visible = false;
+            scene.add(parallelsGroup);
+
+            northSouthGroup = createHemisphereIndicators('ns');
+            northSouthGroup.visible = false;
+            scene.add(northSouthGroup);
+
+            eastWestGroup = createHemisphereIndicators('ew');
+            eastWestGroup.visible = false;
+            scene.add(eastWestGroup);
+        }
+
+        function createMeridian() {
+            const curve = new THREE.EllipseCurve(
+                0, 0,
+                1, 1,
+                0, 2 * Math.PI,
+                false,
+                0
+            );
+            const points = curve.getPoints(50);
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+            return new THREE.Line(geometry, material);
+        }
+
+        function createParallel(latitude) {
+            const radius = Math.cos((latitude * Math.PI) / 180);
+            const geometry = new THREE.TorusGeometry(radius, 0.002, 16, 100);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const parallel = new THREE.Mesh(geometry, material);
+            parallel.position.y = Math.sin((latitude * Math.PI) / 180);
+            parallel.rotation.x = Math.PI / 2;
+            return parallel;
+        }
+
+        function createHemisphereIndicators(type) {
+            const group = new THREE.Group();
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x0000ff,
+                transparent: true,
+                opacity: 0.2,
+                side: THREE.DoubleSide
+            });
+
+            if (type === 'ns') {
+                const northGeometry = new THREE.SphereGeometry(1, 32, 32, 0, Math.PI * 2, 0, Math.PI/2);
+                const northHemisphere = new THREE.Mesh(northGeometry, material.clone());
+                northHemisphere.material.color.setHex(0xff0000);
+                group.add(northHemisphere);
+
+                const southGeometry = new THREE.SphereGeometry(1, 32, 32, 0, Math.PI * 2, Math.PI/2, Math.PI/2);
+                const southHemisphere = new THREE.Mesh(southGeometry, material.clone());
+                southHemisphere.material.color.setHex(0x0000ff);
+                group.add(southHemisphere);
+            } else {
+                const eastGeometry = new THREE.SphereGeometry(1, 32, 32, 0, Math.PI);
+                const eastHemisphere = new THREE.Mesh(eastGeometry, material.clone());
+                eastHemisphere.material.color.setHex(0xff0000);
+                group.add(eastHemisphere);
+
+                const westGeometry = new THREE.SphereGeometry(1, 32, 32, Math.PI, Math.PI);
+                const westHemisphere = new THREE.Mesh(westGeometry, material.clone());
+                westHemisphere.material.color.setHex(0x0000ff);
+                group.add(westHemisphere);
+            }
+
+            return group;
+        }
+
+        function addEventListeners() {
+            document.getElementById('equator').addEventListener('click', function() {
+                toggleFeature(equatorLine, this);
+            });
+
+            document.getElementById('meridians').addEventListener('click', function() {
+                toggleFeature(meridiansGroup, this);
+            });
+
+            document.getElementById('parallels').addEventListener('click', function() {
+                toggleFeature(parallelsGroup, this);
+            });
+
+            document.getElementById('hemispheres-ns').addEventListener('click', function() {
+                toggleFeature(northSouthGroup, this);
+                if(eastWestGroup.visible) {
+                    eastWestGroup.visible = false;
+                    document.getElementById('hemispheres-ew').classList.remove('active');
+                }
+                hideCoordinates();
+            });
+
+            document.getElementById('hemispheres-ew').addEventListener('click', function() {
+                toggleFeature(eastWestGroup, this);
+                if(northSouthGroup.visible) {
+                    northSouthGroup.visible = false;
+                    document.getElementById('hemispheres-ns').classList.remove('active');
+                }
+                toggleCoordinates(eastWestGroup.visible);
+            });
+
+            document.getElementById('reset').addEventListener('click', resetScene);
+        }
+
+        function toggleFeature(feature, button) {
+            feature.visible = !feature.visible;
+            button.classList.toggle('active');
+        }
+
+        function toggleCoordinates(show) {
+            longitudeDisplay.style.display = show ? 'block' : 'none';
+            latitudeDisplay.style.display = show ? 'block' : 'none';
+        }
+
+        function hideCoordinates() {
+            toggleCoordinates(false);
+        }
+
+        function updateCoordinates() {
+            let rotation = earth.rotation.y;
+            if (controls) {
+                rotation += controls.getAzimuthalAngle();
+            }
+            rotation = rotation % (2 * Math.PI);
+            const longitude = (rotation * 180 / Math.PI) % 360;
+            const formattedLongitude = ((longitude + 180) % 360 - 180).toFixed(1);
+            
+            const phi = controls ? controls.getPolarAngle() : Math.PI / 2;
+            const latitude = 90 - (phi * 180 / Math.PI);
+            const formattedLatitude = latitude.toFixed(1);
+            
+            longitudeDisplay.textContent = `经度: ${Math.abs(formattedLongitude)}°${formattedLongitude >= 0 ? 'E' : 'W'}`;
+            latitudeDisplay.textContent = `纬度: ${Math.abs(formattedLatitude)}°${formattedLatitude >= 0 ? 'N' : 'S'}`;
+        }
+
+        function resetScene() {
+            earth.rotation.set(0, 0, 0);
+            
+            camera.position.copy(initialCameraPosition);
+            camera.lookAt(scene.position);
+            
+            controls.reset();
+            
+            autoRotate = true;
+            
+            equatorLine.visible = false;
+            meridiansGroup.visible = false;
+            parallelsGroup.visible = false;
+            northSouthGroup.visible = false;
+            eastWestGroup.visible = false;
+            
+            document.querySelectorAll('.control-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            hideCoordinates();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            controls.update();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            controls.update();
+            
+            if (autoRotate) {
+                earth.rotation.y += 0.001;
+            }
+            
+            if(eastWestGroup.visible) {
+                updateCoordinates();
+            }
+            
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>交互式太阳系模型</title>
+    <style>
+        body { 
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+        }
+        canvas { 
+            display: block;
+            cursor: grab;
+        }
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        button {
+            display: block;
+            margin: 5px;
+            padding: 8px 15px;
+            background: #4CAF50;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="toggleAnimation()">暂停/继续</button>
+
+    </div>
+    <canvas id="solarSystem"></canvas>
+
+    <script>
+        const canvas = document.getElementById('solarSystem');
+        const ctx = canvas.getContext('2d');
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        let animationId, isAnimating = true;
+        let speedFactor = 18; // 速度控制因子
+
+        // 天体参数配置（[[3]](#__3) [[18]](#__18)）
+        const planets = [
+            { name: '水星', radius: 4, orbit: 60, speed: 0.02, color: '#A0522D' },
+            { name: '金星', radius: 6, orbit: 90, speed: 0.015, color: '#DEB887' },
+            { name: '地球', radius: 7, orbit: 130, speed: 0.01, color: '#4169E1' },
+            { name: '火星', radius: 5, orbit: 170, speed: 0.008, color: '#CD5C5C' },
+            { name: '木星', radius: 15, orbit: 220, speed: 0.005, color: '#DAA520' },
+            { name: '土星', radius: 13, orbit: 280, speed: 0.004, color: '#F4A460' },
+            { name: '天王星', radius: 11, orbit: 340, speed: 0.003, color: '#75B6D5' },
+            { name: '海王星', radius: 10, orbit: 400, speed: 0.0025, color: '#3B54D6' }
+        ];
+
+        // 初始化画布
+        function init() {
+            ctx.translate(width/2, height/2);
+            draw();
+        }
+
+        // 绘制函数（[[7]](#__7) [[18]](#__18)）
+        function draw() {
+            ctx.clearRect(-width/2, -height/2, width, height);
+            
+            // 绘制太阳
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI*2);
+            ctx.fillStyle = '#FFD700';
+            ctx.fill();
+
+            // 绘制行星（[[9]](#__9)）
+            planets.forEach(planet => {
+                const angle = Date.now() * planet.speed * speedFactor / 1000;
+                
+                // 计算行星位置
+                const x = Math.cos(angle) * planet.orbit;
+                const y = Math.sin(angle) * planet.orbit;
+                
+                // 绘制轨道
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.beginPath();
+                ctx.arc(0, 0, planet.orbit, 0, Math.PI*2);
+                ctx.stroke();
+
+                // 绘制行星
+                ctx.beginPath();
+                ctx.arc(x, y, planet.radius, 0, Math.PI*2);
+                ctx.fillStyle = planet.color;
+                ctx.fill();
+
+                // 行星自转（[[11]](#__11)）
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(angle * 5);
+                ctx.fillStyle = '#FFFFFF40';
+                ctx.fillRect(-planet.radius, -planet.radius/2, planet.radius*2, planet.radius);
+                ctx.restore();
+
+                // 绘制行星名称
+                ctx.fillStyle = 'white'; // 设置文本颜色
+                ctx.font = '12px Arial'; // 设置字体
+                ctx.textAlign = 'center'; // 设置文本对齐方式
+                ctx.fillText(planet.name, x, y - planet.radius - 5); // 在行星上方绘制名称
+            });
+
+            if(isAnimating) animationId = requestAnimationFrame(draw);
+        }
+
+        // 控制函数（[[7]](#__7) [[15]](#__15)）
+        function toggleAnimation() {
+            isAnimating = !isAnimating;
+            if(isAnimating) draw();
+        }
+        
+       function speedUp() {
+            speedFactor = Math.min(5, speedFactor + 0.8); // 提升加速幅度
+        }
+
+        function slowDown() {
+            speedFactor = Math.max(0.2, speedFactor - 0.8); // 扩大减速范围
+        }
+
+
+        function reset() {
+            speedFactor = 1;
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            init();
+        }
+
+        // 事件监听（[[2]](#__2)）
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            ctx.translate(width/2, height/2);
+        });
+
+        init();
+    </script>
+</body>
+</html>

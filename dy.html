@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D地月系演示</title>
+    <style>
+        body { 
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+        }
+        canvas { display: block; }
+        #info {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: rgba(255,255,255,0.9);
+            font-family: Arial;
+            z-index: 100;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="info">地月系演示 | 鼠标右键拖拽 | 滚轮缩放</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        let scene, camera, renderer, controls;
+        let earth, moon, sunLight;
+        let time = 0;
+        const EARTH_RADIUS = 2;
+        const MOON_DISTANCE = 6;
+        
+        function init() {
+            // 初始化场景 [[7]](#__7) [[11]](#__11)
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            
+            // 相机设置 [[8]](#__8)
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 15, 25);
+            
+            // 渲染器配置 [[16]](#__16)
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                powerPreference: "high-performance"
+            });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            // 轨道控制器 [[10]](#__10)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            createEarth();
+            createMoon();
+            createSunLight();
+            addTerminatorEffect();
+            
+            animate();
+        }
+
+        function createEarth() {
+            // 地球材质 [[11]](#__11) [[19]](#__19)
+            const textureLoader = new THREE.TextureLoader();
+            const earthTexture = textureLoader.load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg');
+            const bumpMap = textureLoader.load('https://threejs.org/examples/textures/planets/earth_normal_2048.jpg');
+            
+            const material = new THREE.MeshStandardMaterial({
+                map: earthTexture,
+                normalMap: bumpMap,
+                normalScale: new THREE.Vector2(0.8, 0.8),
+                roughness: 0.7,
+                metalness: 0.3
+            });
+            
+            // 地球模型 [[4]](#__4)
+            const geometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64);
+            earth = new THREE.Mesh(geometry, material);
+            earth.rotation.x = -23.4 * Math.PI/180; // 地轴倾斜
+            scene.add(earth);
+            
+            // 添加地轴 [[0]](#__0)
+            const axisGeometry = new THREE.CylinderGeometry(0.05, 0.05, EARTH_RADIUS*3, 8);
+            const axisMaterial = new THREE.MeshBasicMaterial({color: 0xffff00});
+            const axis = new THREE.Mesh(axisGeometry, axisMaterial);
+            axis.rotation.z = Math.PI/2;
+            earth.add(axis);
+        }
+
+        function createMoon() {
+            // 月球材质 [[3]](#__3)
+            const textureLoader = new THREE.TextureLoader();
+            const moonTexture = textureLoader.load('https://threejs.org/examples/textures/planets/moon_1024.jpg');
+            
+            const material = new THREE.MeshStandardMaterial({
+                map: moonTexture,
+                roughness: 0.8,
+                metalness: 0.2,
+                transparent: true
+            });
+            
+            const geometry = new THREE.SphereGeometry(EARTH_RADIUS*0.27, 32, 32);
+            moon = new THREE.Mesh(geometry, material);
+            scene.add(moon);
+        }
+
+        function createSunLight() {
+            // 太阳光源 [[13]](#__13)
+            sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            sunLight.position.set(50, 50, 50);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+            
+            // 太阳可视化
+            const sunGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const sunMaterial = new THREE.MeshBasicMaterial({color: 0xffff00});
+            const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+            sunLight.add(sunMesh);
+        }
+
+        function addTerminatorEffect() {
+            // 晨昏线着色器 [[13]](#__13)
+            const uniforms = {
+                sunDirection: { value: new THREE.Vector3() },
+                earthTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg') }
+            };
+            
+            earth.material.onBeforeCompile = shader => {
+                shader.uniforms.sunDirection = uniforms.sunDirection;
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    '#include <dithering_fragment>',
+                    `
+                    vec3 lightDir = normalize(sunDirection);
+                    vec3 normal = normalize(vNormal);
+                    float diff = dot(normal, lightDir);
+                    if(diff < 0.1) gl_FragColor.rgb *= 0.5;
+                    ${shader.fragmentShader}
+                    `
+                );
+            };
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.003;
+
+            // 地球自转 [[4]](#__4)
+            earth.rotation.y += 0.0015;
+            
+            // 月球公转与月相 [[2]](#__2) [[3]](#__3)
+            const moonPhase = time * 2;
+            moon.position.x = Math.cos(moonPhase) * MOON_DISTANCE;
+            moon.position.z = Math.sin(moonPhase) * MOON_DISTANCE;
+            moon.material.opacity = Math.abs(Math.cos(moonPhase));
+            moon.lookAt(earth.position);
+            
+            // 太阳运动 [[9]](#__9)
+            sunLight.position.x = Math.cos(time/2) * 50;
+            sunLight.position.z = Math.sin(time/2) * 50;
+            sunLight.target.position.copy(earth.position);
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>

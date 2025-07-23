@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>太阳直射点回归运动示意图</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f8ff;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        .simulation-container {
+            width: 750px;
+            height: 400px;
+            margin: 50px auto;
+            position: relative;
+            background-color: #000033;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .earth-container {
+            width: 300px;
+            height: 300px;
+            position: absolute;
+            left: 100px;
+            top: 50px;
+            border: 1px solid #333;
+            border-radius: 50%;
+            background-color: #3399ff;
+            overflow: hidden;
+        }
+        
+        .equator {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background-color: #ff0000;
+            top: 50%;
+            z-index: 2;
+        }
+        
+        .tropic-cancer {
+            position: absolute;
+            width: 100%;
+            height: 1px;
+            background-color: #ff6600;
+            top: 26.5%;
+            z-index: 2;
+        }
+        
+        .tropic-capricorn {
+            position: absolute;
+            width: 100%;
+            height: 1px;
+            background-color: #ff6600;
+            top: 73.5%;
+            z-index: 2;
+        }
+        
+        .sun {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background-color: #ffff00;
+            border-radius: 50%;
+            box-shadow: 0 0 30px 10px rgba(255, 255, 0, 0.7);
+            z-index: 3;
+            right: 100px;
+            transform: translate(50%, -50%);
+        }
+        
+        .label {
+            position: absolute;
+            left: 10px;
+            font-weight: bold;
+            z-index: 3;
+            color: white;
+        }
+        
+        .sunlight {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(to left, rgba(255, 255, 0, 0.8), rgba(255, 255, 0, 0.2));
+            z-index: 1;
+            transform-origin: right center;
+        }
+        
+        .sunray-container {
+            position: absolute;
+            z-index: 2;
+            pointer-events: none;
+        }
+        
+        .arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-right: 12px solid rgba(255, 255, 0, 0.9);
+            z-index: 3;
+            transform-origin: center right;
+        }
+        
+        .direct-ray-point {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #ff0000;
+            border-radius: 50%;
+            box-shadow: 0 0 5px 2px rgba(255, 0, 0, 0.7);
+            z-index: 4;
+        }
+        
+        .perpendicular-indicator {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-right: 2px solid #00ff00;
+            border-bottom: 2px solid #00ff00;
+            z-index: 4;
+            transform: rotate(45deg);
+            opacity: 0.8;
+        }
+        
+        .control-panel {
+            margin: 20px auto;
+            padding: 10px;
+            background-color: #e6f2ff;
+            border-radius: 5px;
+        }
+        
+        .date-display {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #333;
+        }
+        
+        .info-panel {
+            margin: 20px auto;
+            padding: 15px;
+            background-color: #e6f2ff;
+            border-radius: 5px;
+            text-align: left;
+        }
+        
+        button {
+            padding: 8px 15px;
+            margin: 0 5px;
+            border-radius: 4px;
+            border: none;
+            background-color: #4285f4;
+            color: white;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #3b78e7;
+        }
+        
+        input[type="range"] {
+            vertical-align: middle;
+            margin: 0 10px;
+        }
+        
+        .angle-display {
+            position: absolute;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.7);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>太阳直射点回归运动示意图</h1>
+        
+        <div class="date-display" id="dateDisplay">1月1日</div>
+        
+        <div class="simulation-container">
+            <div class="earth-container" id="earthContainer">
+                <div class="equator"></div>
+                <div class="tropic-cancer"></div>
+                <div class="tropic-capricorn"></div>
+                
+                <div class="label" style="top: 45%;">赤道</div>
+                <div class="label" style="top: 21.5%;">北回归线</div>
+                <div class="label" style="top: 68.5%;">南回归线</div>
+            </div>
+            
+            <div class="sun" id="sun"></div>
+            <div id="sunRays"></div>
+        </div>
+        
+        <div class="control-panel">
+            <button id="playBtn">播放/暂停</button>
+            <button id="resetBtn">重置</button>
+            <input type="range" id="speedControl" min="1" max="10" value="5">
+            <label for="speedControl">速度</label>
+        </div>
+        
+        <div class="info-panel">
+            <h3>太阳直射点运动说明：</h3>
+            <p>1. 太阳直射点全年在南北回归线之间移动</p>
+            <p>2. 3月21日(春分)：太阳直射赤道，赤道正午太阳高度角为90°</p>
+            <p>3. 6月22日(夏至)：太阳直射北回归线，北回归线正午太阳高度角为90°</p>
+            <p>4. 9月23日(秋分)：太阳直射赤道，赤道正午太阳高度角为90°</p>
+            <p>5. 12月22日(冬至)：太阳直射南回归线，南回归线正午太阳高度角为90°</p>
+            <p>直射点处的太阳光线与地球表面垂直（太阳高度角为90°），箭头表示太阳光线照射方向，红点表示太阳直射点。</p>
+        </div>
+    </div>
+
+    <script>
+        const sun = document.getElementById('sun');
+        const dateDisplay = document.getElementById('dateDisplay');
+        const playBtn = document.getElementById('playBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const speedControl = document.getElementById('speedControl');
+        const sunRays = document.getElementById('sunRays');
+        const earthContainer = document.getElementById('earthContainer');
+        
+        let isPlaying = false;
+        let animationId;
+        let day = 0;
+        let speed = 5;
+        
+        // 地球参数
+        const earthTop = 50;
+        const earthHeight = 300;
+        const earthLeft = 100;
+        const earthWidth = 300;
+        const earthCenterX = earthLeft + earthWidth/2;
+        const earthCenterY = earthTop + earthHeight/2;
+        const earthRadius = earthWidth/2;
+        
+        const equatorPosition = earthTop + earthHeight/2; // 赤道位置
+        const tropicCancerPosition = earthTop + earthHeight * 0.265; // 北回归线位置
+        const tropicCapricornPosition = earthTop + earthHeight * 0.735; // 南回归线位置
+        
+        // 太阳参数
+        const sunX = 650; // 太阳右侧位置
+        
+        // 模拟一年365天的运动
+        function updateSunPosition() {
+            const maxDays = 365;
+            
+            // 计算太阳直射点在地球上的位置 (在南北回归线之间)
+            // 振幅调整为正好在北回归线和南回归线之间移动
+            const amplitude = (tropicCapricornPosition - tropicCancerPosition) / 2;
+            const midpoint = tropicCancerPosition + amplitude;
+            const directRayEarthY = midpoint + amplitude * Math.sin(2 * Math.PI * (day/maxDays));
+            
+            // 计算对应的太阳位置
+            // 太阳位置应该与直射点在同一水平线上
+            const sunY = directRayEarthY;
+            sun.style.top = sunY + 'px';
+            
+            // 清除现有的光线
+            sunRays.innerHTML = '';
+            
+            // 创建直射光线（带箭头）
+            createDirectSunRay(directRayEarthY);
+            
+            // 添加更多太阳光线
+            createAdditionalSunRays(5, directRayEarthY);
+            
+            // 更新日期显示
+            updateDateDisplay();
+            
+            // 自动增加天数
+            day = (day + 1) % maxDays;
+            
+            if (isPlaying) {
+                animationId = setTimeout(updateSunPosition, 100 / speed);
+            }
+        }
+        
+        // 创建直射光线 - 垂直于地球表面
+        function createDirectSunRay(directRayEarthY) {
+            // 计算直射点在地球上的位置
+            // 这里我们需要找到地球表面的点
+            
+            // 计算直射点与地球中心的相对Y位置
+            const relativeY = directRayEarthY - earthCenterY;
+            
+            // 计算直射点在地球圆周上的X坐标
+            // 使用勾股定理: x^2 + y^2 = r^2
+            const surfaceX = Math.sqrt(earthRadius * earthRadius - relativeY * relativeY);
+            const directRayEarthX = earthCenterX + surfaceX;
+            
+            // 计算地球表面在该点的切线角度
+            // 切线角度为从地球中心到该点的半径的垂线
+            const angleToCenter = Math.atan2(relativeY, surfaceX);
+            const tangentAngle = angleToCenter + Math.PI/2;
+            
+            // 垂直于切线的光线角度（即垂直于地表）
+            const rayAngle = tangentAngle - Math.PI/2;
+            
+            // 创建光线容器
+            const sunrayContainer = document.createElement('div');
+            sunrayContainer.className = 'sunray-container';
+            sunrayContainer.style.left = directRayEarthX + 'px';
+            sunrayContainer.style.top = directRayEarthY + 'px';
+            
+            // 创建光线
+            const rayLength = sunX - directRayEarthX; // 从地球表面到太阳的距离
+            const ray = document.createElement('div');
+            ray.className = 'sunlight';
+            ray.style.width = rayLength + 'px';
+            ray.style.transformOrigin = 'right center';
+            ray.style.transform = `rotate(${rayAngle}rad)`;
+            sunrayContainer.appendChild(ray);
+            
+            // 创建箭头
+            const arrow = document.createElement('div');
+            arrow.className = 'arrow';
+            arrow.style.left = '0px';
+            arrow.style.top = '-5px';
+            arrow.style.transform = `rotate(${rayAngle}rad) rotate(180deg)`;
+            sunrayContainer.appendChild(arrow);
+            
+            // 创建直射点红点
+            const directPoint = document.createElement('div');
+            directPoint.className = 'direct-ray-point';
+            directPoint.style.left = '-5px';
+            directPoint.style.top = '-5px';
+            sunrayContainer.appendChild(directPoint);
+            
+            // 添加垂直指示器（表示90度角）
+            const perpIndicator = document.createElement('div');
+            perpIndicator.className = 'perpendicular-indicator';
+            perpIndicator.style.left = '-15px';
+            perpIndicator.style.top = '-15px';
+            perpIndicator.style.transform = `rotate(${tangentAngle}rad)`;
+            sunrayContainer.appendChild(perpIndicator);
+            
+            // 显示太阳高度角
+            const angleDisplay = document.createElement('div');
+            angleDisplay.className = 'angle-display';
+            angleDisplay.textContent = '90°';
+            angleDisplay.style.left = '-35px';
+            angleDisplay.style.top = '-25px';
+            sunrayContainer.appendChild(angleDisplay);
+            
+            sunRays.appendChild(sunrayContainer);
+        }
+        
+        // 创建额外的太阳光线 - 从太阳发射到地球不同位置
+        function createAdditionalSunRays(count, directRayY) {
+            // 均匀分布在地球上的点
+            for (let i = 0; i < count; i++) {
+                // 计算地球上的点，均匀分布在上半圆和下半圆
+                const angle = -Math.PI/2 + (i + 1) * Math.PI / (count + 1);
+                
+                // 计算地球表面上的点坐标
+                const surfaceX = earthCenterX + Math.cos(angle) * earthRadius;
+                const surfaceY = earthCenterY + Math.sin(angle) * earthRadius;
+                
+                // 跳过与直射点太接近的点
+                if (Math.abs(surfaceY - directRayY) < 20) continue;
+                
+                // 计算从太阳到该点的角度
+                const deltaX = surfaceX - sunX;
+                const deltaY = surfaceY - directRayY;
+                const rayAngle = Math.atan2(deltaY, deltaX);
+                
+                // 创建光线
+                createSunRayAtAngle(surfaceX, surfaceY, rayAngle, directRayEarthY);
+            }
+        }
+        
+        // 创建指定角度的光线
+        function createSunRayAtAngle(x, y, angle, directRayEarthY) {
+            // 创建光线容器
+            const sunrayContainer = document.createElement('div');
+            sunrayContainer.className = 'sunray-container';
+            sunrayContainer.style.left = x + 'px';
+            sunrayContainer.style.top = y + 'px';
+            
+            // 计算光线长度
+            const rayLength = Math.sqrt(Math.pow(sunX - x, 2) + Math.pow(directRayEarthY - y, 2));
+            
+            // 创建光线
+            const ray = document.createElement('div');
+            ray.className = 'sunlight';
+            ray.style.width = rayLength + 'px';
+            ray.style.opacity = '0.5';
+            ray.style.transform = `rotate(${angle}rad)`;
+            sunrayContainer.appendChild(ray);
+            
+            // 创建箭头
+            const arrow = document.createElement('div');
+            arrow.className = 'arrow';
+            arrow.style.left = '0px';
+            arrow.style.top = '-5px';
+            arrow.style.opacity = '0.5';
+            arrow.style.transform = `rotate(${angle}rad) rotate(180deg)`;
+            sunrayContainer.appendChild(arrow);
+            
+            sunRays.appendChild(sunrayContainer);
+        }
+        
+        function updateDateDisplay() {
+            const months = [
+                '1月', '2月', '3月', '4月', '5月', '6月', 
+                '7月', '8月', '9月', '10月', '11月', '12月'
+            ];
+            
+            // 计算月份和日期 (粗略估计)
+            const month = Math.floor(day / 30.5);
+            const date = Math.floor(day % 30.5) + 1;
+            
+            // 特殊日期标记
+            let specialDay = '';
+            
+            // 根据直射点位置来确定节气
+            // 北回归线
+            if (Math.abs(day - 172) < 2) {  // 6月22日 夏至
+                specialDay = '（夏至）';
+            } 
+            // 南回归线
+            else if (Math.abs(day - 355) < 2 || Math.abs(day - 0) < 2) {  // 12月22日 冬至
+                specialDay = '（冬至）';
+            }
+            // 赤道（春分和秋分）
+            else if (Math.abs(day - 79) < 2) {  // 3月21日 春分
+                specialDay = '（春分）';
+            } 
+            else if (Math.abs(day - 266) < 2) {  // 9月23日 秋分
+                specialDay = '（秋分）';
+            }
+            
+            dateDisplay.textContent = `${months[month]}${date}日 ${specialDay}`;
+        }
+        
+        // 控制按钮事件
+        playBtn.addEventListener('click', function() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                animate();
+            } else {
+                cancelAnimationFrame(animationId);
+            }
+
+            function animate() {
+                if (!isPlaying) return;
+                day += speed * 0.1;
+                updateSunPosition();
+                animationId = requestAnimationFrame(animate);
+            }
+        });
+        
+        resetBtn.addEventListener('click', function() {
+            isPlaying = false;
+            clearTimeout(animationId);
+            day = 0;
+            updateSunPosition();
+        });
+        
+        speedControl.addEventListener('input', function() {
+            speed = parseInt(this.value);
+        });
+        
+        // 初始化
+        updateSunPosition();
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+        }
+    </script>
+</body>
+</html>

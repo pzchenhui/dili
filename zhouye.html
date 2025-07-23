@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>昼夜更替现象演示 - Three.js版</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            z-index: 100;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+        
+        .btn:hover {
+            background-color: #34495e;
+        }
+        
+        .title {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            z-index: 100;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+            z-index: 200;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        #progress {
+            width: 100%;
+            height: 20px;
+            background-color: #111;
+            margin-top: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        #progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #3498db;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div class="title">昼夜更替现象演示</div>
+        <div id="loading">
+            <div>正在初始化场景...</div>
+            <div id="progress"><div id="progress-bar"></div></div>
+        </div>
+        <div class="controls">
+            <button class="btn" id="toggle-btn">暂停</button>
+            <button class="btn" id="reset-btn">重置</button>
+        </div>
+    </div>
+
+    <!-- 使用CDN引入Three.js核心库和轨道控制器 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls导入 - 使用更可靠的CDN链接 -->
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // 全局变量
+        let scene, camera, renderer, earth, sun, sunLight, controls;
+        let isRotating = true;
+        let rotationSpeed = 0.005; // 地球自转速度
+        let isInitialized = false; // 标记场景是否已初始化
+        
+        // 设置进度条
+        function updateProgress(percent) {
+            document.getElementById('progress-bar').style.width = percent + '%';
+        }
+
+        // 初始化函数 - 入口点
+        function initialize() {
+            try {
+                if (isInitialized) return; // 防止重复初始化
+                isInitialized = true;
+                
+                updateProgress(10);
+                
+                // 检查WebGL支持
+                if (!checkWebGLSupport()) {
+                    showErrorMessage("您的浏览器不支持WebGL，无法显示3D内容。");
+                    return;
+                }
+                
+                updateProgress(20);
+                
+                // 创建Three.js场景
+                setupScene();
+                
+                updateProgress(40);
+                
+                // 创建星空、地球、太阳等元素
+                createSceneElements();
+                
+                updateProgress(70);
+                
+                // 设置事件监听器
+                setupEventListeners();
+                
+                updateProgress(90);
+                
+                // 开始渲染循环
+                animate();
+                
+                updateProgress(100);
+                
+                // 隐藏加载提示
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                }, 500);
+            } catch (error) {
+                console.error("初始化错误:", error);
+                showErrorMessage("初始化3D场景时发生错误: " + error.message);
+            }
+        }
+        
+        // 检查WebGL支持
+        function checkWebGLSupport() {
+            try {
+                const canvas = document.createElement('canvas');
+                return !!(window.WebGLRenderingContext && 
+                          (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+            } catch (e) {
+                return false;
+            }
+        }
+        
+        // 显示错误消息
+        function showErrorMessage(message) {
+            const loadingElement = document.getElementById('loading');
+            loadingElement.innerHTML = `<div style="color:red">${message}</div>`;
+        }
+
+        // 创建场景、相机和渲染器
+        function setupScene() {
+            // 创建场景
+            scene = new THREE.Scene();
+            
+            // 调整相机参数（增大视野角度并拉远视点）
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 200, 800); // 修改相机位置
+            
+            // 创建渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000);
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            // 添加轨道控制器
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 100;  // 允许更近距离观察
+            controls.maxDistance = 1200; // 允许更远视角
+        }
+
+        // 创建场景元素
+        function createSceneElements() {
+            // 添加环境光
+            const ambientLight = new THREE.AmbientLight(0x333333);
+            scene.add(ambientLight);
+            
+            // 添加宇宙背景
+            createStars();
+            
+            // 创建地球
+            createEarth();
+            
+            // 创建太阳
+            createSun();
+            
+            // 创建太阳光
+            createSunLight();
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 窗口大小变化时更新渲染器和相机
+            window.addEventListener('resize', function() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // 添加控制按钮事件监听
+            const toggleRotationBtn = document.getElementById('toggle-btn');
+            if (toggleRotationBtn) {
+                toggleRotationBtn.addEventListener('click', function() {
+                    isRotating = !isRotating;
+                    this.textContent = isRotating ? '暂停' : '恢复'; // 同步按钮文字
+                });
+            }
+            
+            const speedControl = document.getElementById('speedControl');
+            if (speedControl) {
+                speedControl.addEventListener('input', function() {
+                    rotationSpeed = this.value / 10000;
+                    const speedValue = document.getElementById('speedValue');
+                    if (speedValue) {
+                        speedValue.textContent = Math.round(rotationSpeed * 10000);
+                    }
+                });
+            }
+        }
+
+        // 创建地球
+        function createEarth() {
+            const earthGeometry = new THREE.SphereGeometry(100, 64, 64);
+            const textureLoader = new THREE.TextureLoader();
+            
+            const earthTexture = textureLoader.load('https://threejs.org/examples/textures/land_ocean_ice_cloud_2048.jpg');
+
+            // 修改后的着色器材质
+            const earthMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    earthTexture: { value: earthTexture },
+                    sunPosition: { value: new THREE.Vector3() }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        vPosition = position;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D earthTexture;
+                    uniform vec3 sunPosition;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    
+                    void main() {
+                        // 基础贴图颜色
+                        vec3 color = texture2D(earthTexture, vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y)).rgb;
+                        
+                        // 计算光照强度
+                        vec3 lightDir = normalize(sunPosition - vPosition);
+                        float intensity = max(dot(vNormal, lightDir), 0.0);
+                        
+                        // 晨昏线判断
+                        vec3 viewDir = normalize(-vPosition); // 视线方向
+                        float edgeWidth = 0.03; // 线宽控制
+                        float twilight = smoothstep(0.0, edgeWidth, intensity);
+                        
+                        // 晨线（红色）和昏线（黑色）判断
+                        float angle = dot(normalize(vPosition), lightDir);
+                        vec3 dawnColor = vec3(1.0, 0.0, 0.0); // 红色晨线
+                        vec3 duskColor = vec3(0.0, 0.0, 0.0); // 黑色昏线
+                        
+                        // 混合晨昏线颜色
+                        vec3 terminatorColor = (angle > 0.0) ? duskColor : dawnColor;
+                        float terminator = smoothstep(0.0, edgeWidth, abs(intensity - 0.08));
+                        
+                        // 最终颜色混合
+                        vec3 finalColor = mix(color * 0.1, color, smoothstep(0.0, 0.2, intensity));
+                        finalColor = mix(finalColor, terminatorColor, terminator * 0.8);
+                        
+                        gl_FragColor = vec4(finalColor, 1.0);
+                    }
+                `
+            });
+            
+            earth = new THREE.Mesh(earthGeometry, earthMaterial);
+            scene.add(earth);
+        }
+
+        // 创建太阳
+        function createSun() {
+            // 增大太阳半径到100（原50）
+            const sunGeometry = new THREE.SphereGeometry(100, 32, 32);
+            
+            // 创建发光材质
+            const sunMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffdd00,
+                transparent: true,
+                opacity: 0.9
+            });
+            
+            sun = new THREE.Mesh(sunGeometry, sunMaterial);
+            sun.position.set(500, 0, 0);
+            scene.add(sun);
+            
+            // 同步增大光晕半径到110（原55）
+            const sunGlowGeometry = new THREE.SphereGeometry(110, 32, 32);
+            const sunGlowMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    viewVector: { value: new THREE.Vector3() }
+                },
+                vertexShader: `
+                    uniform vec3 viewVector;
+                    varying float intensity;
+                    void main() {
+                        vec3 vNormal = normalize(normalMatrix * normal);
+                        intensity = pow(1.0 - abs(dot(vNormal, vec3(0, 0, 1))), 2.0);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    varying float intensity;
+                    void main() {
+                        vec3 glow = vec3(1.0, 0.8, 0.0) * intensity;
+                        gl_FragColor = vec4(glow, 1.0);
+                    }
+                `,
+                side: THREE.BackSide,
+                blending: THREE.AdditiveBlending,
+                transparent: true
+            });
+            
+            const sunGlow = new THREE.Mesh(sunGlowGeometry, sunGlowMaterial);
+            sun.add(sunGlow);
+        }
+
+        // 创建太阳光
+        function createSunLight() {
+            sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            sunLight.position.copy(sun.position);
+            scene.add(sunLight);
+
+            // 完全平行的光线（Y轴均匀分布的平行线）
+            const lightLines = new THREE.Group();
+            const lineMaterial = new THREE.LineBasicMaterial({ 
+                color: 0xffdd00,
+                linewidth: 2,
+                transparent: true,
+                opacity: 0.5
+            });
+            
+            // 生成5条完全平行的光线（缩短光线长度到地球位置）
+            for(let i = 0; i < 5; i++) {
+                const points = [
+                    new THREE.Vector3(0, (i - 2) * 40, 0),
+                    new THREE.Vector3(-400, (i - 2) * 40, 0) // 从-1000改为-400（地球半径100 + 地球到太阳距离500 - 安全间距）
+                ];
+                
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                lightLines.add(new THREE.Line(geometry, lineMaterial));
+            }
+            
+            sun.add(lightLines);
+        }
+
+        // 创建地球
+        function createEarth() {
+            const earthGeometry = new THREE.SphereGeometry(100, 64, 64);
+            const textureLoader = new THREE.TextureLoader();
+            
+            const earthTexture = textureLoader.load('https://threejs.org/examples/textures/land_ocean_ice_cloud_2048.jpg', () => {
+                renderer.render(scene, camera);
+            });
+
+            // 优化材质参数
+            const earthMaterial = new THREE.MeshPhongMaterial({
+                map: earthTexture,
+                shininess: 30,
+                specular: 0x333333,
+                // 移除双面渲染以正确显示昼夜
+                side: THREE.FrontSide 
+            });
+            
+            earth = new THREE.Mesh(earthGeometry, earthMaterial);
+            scene.add(earth);
+        }
+
+        // 修复animate函数中缺失的太阳光位置更新
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 必须更新光源位置
+            if (sun && sunLight) {
+                sunLight.position.copy(sun.position);
+            }
+            
+            controls.update();
+            
+            if (isRotating && earth) {
+                earth.rotation.y += rotationSpeed;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // 创建星空背景
+        function createStars() {
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 1 });
+            
+            const starsVertices = [];
+            for (let i = 0; i < 5000; i++) {
+                const x = Math.random() * 2000 - 1000;
+                const y = Math.random() * 2000 - 1000;
+                const z = Math.random() * 2000 - 1000;
+                starsVertices.push(x, y, z);
+            }
+            
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+            const stars = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(stars);
+        }
+
+        // 当页面加载完成时初始化
+        window.addEventListener('load', initialize);
+    </script>
+</body>
+</html>
